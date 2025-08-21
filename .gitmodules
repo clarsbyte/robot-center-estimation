@@ -1,0 +1,6 @@
+[submodule "src/utils"]
+	path = src/utils
+	url = git@github.com:Triton-Robotics/Utils.git
+[submodule "src/simulation-maniskill"]
+	path = src/simulation-maniskill
+	url = git@github.com:Triton-Robotics/Simulation-ManiSkill.git

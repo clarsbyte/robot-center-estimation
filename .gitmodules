@@ -4,3 +4,6 @@
 [submodule "src/simulation-maniskill"]
 	path = src/simulation-maniskill
 	url = git@github.com:Triton-Robotics/Simulation-ManiSkill.git
+[submodule "src/tr-huskybot-cv"]
+	path = src/tr-huskybot-cv
+	url = git@github.com:Triton-Robotics/TR-huskybot-cv.git

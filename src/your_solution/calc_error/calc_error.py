@@ -1,10 +1,9 @@
 import rclpy
 import rclpy.node
-import rclpy.time
 import rclpy.duration
 
 import tf2_ros
-from geometry_msgs.msg import TransformStamped, Pose
+from geometry_msgs.msg import TransformStamped
 from std_msgs.msg import Float64
 
 
@@ -48,7 +47,7 @@ class CalcError(rclpy.node.Node):
             panel_ground_truth_in_cam_frame.append(target_in_camera_frame)
 
         # debug print
-        # print(-1, " | ", detected_panel_in_cam_frame.transform.translation)
+        # print("detected:", detected_panel_in_cam_frame.transform.translation)
 
         lowest_panel_error_panel: TransformStamped = panel_ground_truth_in_cam_frame[0]
         for i, panel in enumerate(panel_ground_truth_in_cam_frame):

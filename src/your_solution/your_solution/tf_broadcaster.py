@@ -1,14 +1,13 @@
 import rclpy
 import rclpy.node
 import rclpy.qos
-import rclpy.duration
 
 import tf2_ros
 import tf2_geometry_msgs
 
-from geometry_msgs.msg import TransformStamped, Pose, PoseStamped
+from geometry_msgs.msg import TransformStamped, Pose
 
-from tr_messages.msg import DetWithImg, SimGroundTruth, RobotGroundTruth
+from tr_messages.msg import DetWithImg, SimGroundTruth
 
 
 class CalcErrorNode(rclpy.node.Node):
@@ -29,14 +28,11 @@ class CalcErrorNode(rclpy.node.Node):
             rclpy.qos.qos_profile_sensor_data,
         )
 
-        self.latest_ground_truth = SimGroundTruth()
-
         self.tf_broadcaster = tf2_ros.TransformBroadcaster(self)
         self.tf_buffer = tf2_ros.Buffer()
         self.tf_listener = tf2_ros.TransformListener(self.tf_buffer, self)
 
     def det_callback(self, msg):
-        # need to make this a transform stamped because im lazy and thats what my calc_norm() function needs
         detected_panel_in_cam_frame = TransformStamped()
         p_pose: Pose = msg.detection_info.detections[0].results[0].pose.pose
 
@@ -50,54 +46,7 @@ class CalcErrorNode(rclpy.node.Node):
 
         self.tf_broadcaster.sendTransform(detected_panel_in_cam_frame)
 
-        panel_ground_truth_in_cam_frame = []
-
-        for i in range(4):
-            try:
-                target_in_camera_frame = self.tf_buffer.lookup_transform(
-                    # careful about order here
-                    "camera_frame",
-                    f"panel_{i}",
-                    detected_panel_in_cam_frame.header.stamp,
-                )
-            except Exception as e:
-                print("EXCEPTION: ", e)
-                return
-
-            panel_ground_truth_in_cam_frame.append(target_in_camera_frame)
-
-        # debug print
-        # print(-1, " | ", detected_panel_in_cam_frame.transform.translation)
-
-        lowest_panel_error_panel = panel_ground_truth_in_cam_frame[0]
-        for i, panel in enumerate(panel_ground_truth_in_cam_frame):
-            if self.calc_linear_norm(
-                panel, detected_panel_in_cam_frame
-            ) < self.calc_linear_norm(
-                lowest_panel_error_panel, detected_panel_in_cam_frame
-            ):
-                lowest_panel_error_panel = panel
-
-            # debug print
-            # print(
-            #     i,
-            #     " | ",
-            #     panel.transform.translation,
-            #     " | ",
-            #     self.calc_linear_norm(panel, detected_panel_in_cam_frame),
-            # )
-
-    def calc_linear_norm(self, p1: TransformStamped, p2: TransformStamped):
-        norm = (p1.transform.translation.x - p2.transform.translation.x) ** 2
-        norm += (p1.transform.translation.y - p2.transform.translation.y) ** 2
-        norm += (p1.transform.translation.z - p2.transform.translation.z) ** 2
-
-        norm = norm**0.5
-        return norm
-
     def ground_truth_callback(self, msg):
-        self.latest_ground_truth = msg
-
         camera_pose: Pose = msg.primary_robot.camera_pose
 
         camera_transform = TransformStamped()

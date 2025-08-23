@@ -4,9 +4,9 @@
 
 In this training you will create visualizations and logging to determine the accuracy of the HuskyBot cv stack in a simulated environment.
 You will use foxglove to easily visualize what is happening. Your end result might look something like the video below
-<video width="800" controls>
-    <source src=".md/foxglove_demo.webm" type="video/webm">
-</video>
+
+[output.webm](https://github.com/user-attachments/assets/1d7bc3bb-b839-484e-9fd0-1a842f532db3)
+
 
 __in order to complete this assignment please ask the Autonomy lead to invite you to the Foxglove studio organization__
 

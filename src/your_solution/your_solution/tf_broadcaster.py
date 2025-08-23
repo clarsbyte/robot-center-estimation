@@ -42,7 +42,7 @@ class CalcErrorNode(rclpy.node.Node):
 
         detected_panel_in_cam_frame.header.frame_id = "camera_frame"
         detected_panel_in_cam_frame.header.stamp = msg.detection_info.header.stamp
-        detected_panel_in_cam_frame.child_frame_id = "detected_pose"
+        detected_panel_in_cam_frame.child_frame_id = "detected_panel"
         detected_panel_in_cam_frame.transform.translation.x = p_pose.position.x
         detected_panel_in_cam_frame.transform.translation.y = p_pose.position.y
         detected_panel_in_cam_frame.transform.translation.z = p_pose.position.z
@@ -58,8 +58,7 @@ class CalcErrorNode(rclpy.node.Node):
                     # careful about order here
                     "camera_frame",
                     f"panel_{i}",
-                    self.get_clock().now(),  # - rclpy.duration.Duration(seconds=0.01),
-                    # rclpy.duration.Duration(seconds=0.002),
+                    detected_panel_in_cam_frame.header.stamp,
                 )
             except Exception as e:
                 print("EXCEPTION: ", e)

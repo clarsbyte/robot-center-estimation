@@ -22,17 +22,17 @@ __in order to complete this assignment please ask the Autonomy lead to invite yo
 
 ## Getting oriented
 
-TODO FIXME talk about the submodules here
-
 1. clone this repository
 2. run `git submodule update --init` in the root dir of this repo
 3. your workspace should look similar to the following. Make sure the submodule directories are not empty and are initialized with files
+
 ![workspace with submodules initialized](.md/workspace_structure.png)
+
 4. run `colcon build`
 5. run each of the following commands __IN THEIR OWN terminal__ (you can have one terminal window and use multiple tabs, or create multiple terminals in vscode)
 
 ```bash
-# run each in its own terminal
+# run each in its own terminal. Remember to "source install/setup.bash" in each terminal before every command below
 ros2 launch sim_node sim_node_launch.py "cv_exposure:=0.8"
 
 ros2 run huskybot_cv huskybot_cv --ros-args -p "use_sim_time:=true"
@@ -51,20 +51,19 @@ Note: You might notice the robots move slower than you expected, this is a sidee
 
 This is the window that shows debug information about the Huskybot CV stack
 ![huskybot gui](.md/huskybot_gui.png)
+
 Try using the teleop controls you just learned to point the camera at the armor panel of the opposing robot that has a "3" sticker on it. You should see a bounding box be drawn when it is detected
 
 note: HuskyBot crops the image to be a square so armor panels at the extreme left or right edges of the image frame might not be detected. Try moving the opposing robot closer to the center of the frame if this is a problem
 
 ## Part 1 | Broadcasting Transforms
 
-TODO FIXME add updated commands for running nodes. Sim with no human gui etc.
-
 1. create a package ament_python in the src/ dir of this workspace. Package name `your_solution` with a node called `tf_broadcaster`. Your file structure should initially look like the following
 ![your solution file structure](.md/your_solution_file_structure.png)
 
 2. Before you continue [read about tf2 library](https://docs.ros.org/en/humble/Tutorials/Intermediate/Tf2/Tf2-Main.html)
 
-3. Your `tf_broadcaster` should subscribe to the `/detections` and `/simulation/ground_truth` topics.
+3. Your `tf_broadcaster` node should subscribe to the `/detections` and `/simulation/ground_truth` topics.
 
 You must broadcast the following transforms:
 
@@ -91,6 +90,8 @@ make sure it makes sense why `detected_panel` is a child of `camera_frame`. It i
 - install and run [foxglove bridge](https://docs.foxglove.dev/docs/visualization/ros-foxglove-bridge)
 - create a `3D` panel and your /tf tree should automatically populate it
 
+5. Take a screenshot of the 3d panel and upload it to this repo named as  `part_1_3d_panel`
+
 ### Part 1 notes
 
 - as a reference this is everything you would be running in Part 1 (each in their own terminal)
@@ -98,7 +99,7 @@ make sure it makes sense why `detected_panel` is a child of `camera_frame`. It i
 ```bash
 # human gui = false to boost performance and because we don't need it for this assignment. Feel free to toggle this back on if it helps you complete this assignment
 # You can alternatively change the default value in the sim_node_launch.py file to these values so you don't need to override them manually in the command line
- ros2 launch sim_node sim_node_launch.py "human_gui:=false" "cv_exposure:=0.8"
+ros2 launch sim_node sim_node_launch.py "human_gui:=false" "cv_exposure:=0.8"
 
 ros2 run sim_node keyboard_controls 
 
@@ -114,7 +115,7 @@ ros2 run your_solution tf_broadcaster --ros-args -p "use_sim_time:=true"
 1. Create a new directory and file called `calc_error`. Add a empty `__init__.py` file to this directory. Your file structure should look similar to this
 ![file structure](.md/calc_error_file_structure.png)
 
-2. Modify your `setup.py` to add a new "entry point" to the your solution package so you can run `ros2 run your_solution calc_error`.
+2. Modify your `setup.py` to add a new "entry point" to the your solution package so you can run `ros2 run your_solution calc_error`. (you can look at the setup.py of the simulation-maniskill package if you are stuck)
 
 3. Listen to the transforms from the node you wrote in part 1 and use it to calculate the positional error between detected_panel and the four ground truth panels
 
@@ -128,16 +129,16 @@ ros2 run your_solution tf_broadcaster --ros-args -p "use_sim_time:=true"
 ### Part 2 notes
 
 - __IMPORTANT__. This excersice will show you a key limitation of the tf2 library. It is not performant at the millisecond level. Thus if you try fetching transforms at the current time (`self.get_clock().now()`) you will almost always get a exception that the lookup would "require extrapolation into the future." To solve this you must look up transforms slightly in the past. This is acceptable in this case because we have a continous stream of data and we are using tf2 for logging/visualization purposes, but this shows you why it cannot be used in the core cv logic
-- make sure when you lookup transforms to calculate positional error, the transform you use to compute error are from the same timestamp
+- when looking up multiple transforms to calculate the error between them, make sure they are from the same timestamp
 - if there is no detected panel at a perticular timestamp you should not publish anything
 
 ## Part 3 | Launch Files
 
-You may have felt how cumbersome it was to create and run each node in a seperate terminal. Launch files are a way to streamline this process. But remember, when debugging on a small scale it is sometimes easier to fall back on using the `ros2 run` CLI
+You may have felt how cumbersome it was to run each node in a separate terminal. Launch files are a way to streamline this process. But remember, when debugging on a small scale it is sometimes easier to fall back on using the `ros2 run` CLI
 
 1. read the documentation for [launch files](https://docs.ros.org/en/humble/Tutorials/Intermediate/Launch/Launch-Main.html)
 
-2. You should create a launch file that will launch the following nodes __and__ invoke the `sim_node_launch` launch file to start the sim
+2. You should create a launch file that will launch the following nodes __and__ invoke the `sim_node_launch` launch file to start the sim. Create a new package called `my_launch` where this launch file will live
 
 nodes to launch:
 
@@ -153,7 +154,7 @@ nodes to launch:
 
 ## Pitfalls, problems, and things to watch out for
 
-- You will probably see exceptions like this. While a few of them here and there, espicially on startup. If your node is persistently outputting a steady stream of these exceptions something might be wrong.
+- You will probably see exceptions like this. While a few of them here and there, especially on startup is fine. If your node is persistently outputting a steady stream of these exceptions something might be wrong.
 (I printed when an exception is hit for this demo you may handle it differently)
 ![image](.md/exception_extrapolate_future.png)
 
@@ -164,35 +165,3 @@ nodes to launch:
 ## Key takeaways
 
 tf is good for visualization but not performant
-
-misc notes and stuff
-----
-
-make sure to launch with sim_time = true
-
-Lessons to learn:
-    why we use cpp on the robot? look at the tf exceptions. Even though it only takes "a few milliseconds" to broadcast the transforms, at the scales we work at that is too long
-
-    probably fine for a quick check, but this also tells us that logging and visualizations for 
-    millisecond critical code should be written in c++ and tested to see if it can keep up
-
-![debug prints example](.md/image.png)
-
-rename TR-Autonomy
-to TR-autonomy
-
-rm -r build/ install/ log/
-
-foxglove consider setting fixed bounds for y axis in the plot settings instead of automatic
-
-you might not want to select "now" as ur timestamp for measuring error. tf2 struggles a bit with real time
-and since we are just using this for logging and visualization not real time control we can just say
-current time - (some delay) and this will ensure our transform exists in the tf2 buffer and since we recieve a continous stream of data we will log and
-visualize every data point
-
-think deeply and be very careful about what timestamp you select for your transform.
-the panels transform should match the timestamp of the camera position
-
-## launch node
-
-make a launch file with composed together and one where nodes separate?

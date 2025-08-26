@@ -172,7 +172,7 @@ You may have felt how cumbersome it was to run each node in a separate terminal.
 
 1. read the documentation for [launch files](https://docs.ros.org/en/humble/Tutorials/Intermediate/Launch/Launch-Main.html)
 
-2. You should create a launch file that will launch the following nodes __and__ invoke the `sim_node_launch.py` launch file to start the sim. Create a new package called `my_launch` where this launch file will live
+2. You should create a launch file inside your `your_solution` package that will launch the following nodes __and__ invoke the `sim_node_launch.py` launch file to start the sim. Create a new package called `my_launch` where this launch file will live
 
 nodes to launch:
 

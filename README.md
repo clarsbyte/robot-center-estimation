@@ -6,7 +6,9 @@ In this training you will create visualizations and logging to determine the acc
 
 [output.webm](https://github.com/user-attachments/assets/1d7bc3bb-b839-484e-9fd0-1a842f532db3)
 
-__in order to complete this assignment please ask the Autonomy lead to invite you to the Foxglove studio organization__
+- __in order to complete this assignment please ask the Autonomy lead to invite you to the Foxglove studio organization__
+- This assignment is hard, and a big step up from the previous trainings. If you get stuck you are encourage to talk about your problems and collaborate with fellow recruits in the #auto-support discord channel
+- If you do not have much prior experience with robotics [this lecture](https://www.youtube.com/watch?v=jht6k_7LPzY) might be helpful to familiarize yourself with some basic concepts and vocabulary.
 
 ## Learning objectives
 
@@ -60,7 +62,7 @@ note: HuskyBot crops the image to be a square so armor panels at the extreme lef
 1. create a new package in the `src/` directory of this workspace. Build-type `ament_python`, package name `your_solution`, with a node called `tf_broadcaster`. Your file structure should initially look like the following
 ![your solution file structure](.md/your_solution_file_structure.png)
 
-2. Before you continue [read about tf2 library](https://docs.ros.org/en/humble/Tutorials/Intermediate/Tf2/Tf2-Main.html)
+2. Familiarize yourself with the [tf2 library](https://docs.ros.org/en/humble/Tutorials/Intermediate/Tf2/Tf2-Main.html). (You should still read through the whole assignment before deep diving into the tf2 docs)
 
 3. Your `tf_broadcaster` node should subscribe to the `/detections` and `/simulation/ground_truth` topics.
 
@@ -81,7 +83,38 @@ helpful links for msg interfaces
 
 This is what your /tf tree should look like
 ![tf2 tree](.md/tf2_tree.png)
-make sure it makes sense why `detected_panel` is a child of `camera_frame`. It is because the huskybot cv SolvePnP outputs the translation and rotation vectors in terms of the "screen space" not the global world coordinate system
+
+### A brief aside on poses and coordinate frames
+
+#### Pose
+
+The msg interface for a [geometry_msg/pose](https://docs.ros.org/en/humble/p/geometry_msgs/msg/Pose.html) consists of a [geometry_msgs/Point](https://docs.ros.org/en/humble/p/geometry_msgs/msg/Point.html) and a [geometry_msgs/quaternion](https://docs.ros.org/en/humble/p/geometry_msgs/msg/Quaternion.html). A point and a quaternion together can define the position __and__ orientation of an object. You can learn about the basics of quaternions [here](https://docs.ros.org/en/humble/Tutorials/Intermediate/Tf2/Quaternion-Fundamentals.html)
+
+#### coordinate frames
+
+A coordinate frame can essentially be though of as the origin/frame of reference/relationship that defines what a pose is relative to. Some coordinate frames are static, in our case this is called `map`, tf2 docs sometimes use `world` to refer to this static coordinate frame. Coordinate frames need not always be static however, they can also freely move through space. For this assignment `camera_frame` is a dynamic coordinate frame. The position and orientation of the primary robot's camera defines the origin and orientation of this coordinate frame. Any transform that is a child of `camera_frame` will be relative to the origin and orientation of `camera_frame`
+
+- __Key idea:__ The coordinate frame for all of the ground_truth poses from the simulation are part of the static `map` coordinate frame.
+
+- __Key idea:__ The coordinate frame for the position from `/detections` is in the `camera_frame` coordinate frame. Make sure this makes sense, this is the case because the huskybot cv SolvePnP outputs the translation and rotation vectors in terms of the "screen space" not the global world coordinate system. In other words huskybot has no concept of where the camera itself is in 3d space, and it doesn't need to for the functionality it provides.
+
+__an example:__
+
+lets say `camera_frame` is at (x=2,y=2,z=0) and has a orientation of (w=1,x=0,y=0,z=0), which is the base quaternion that defines forward x axis.
+
+now lets say the `detected_panel` has the coordinate of (1,0,0). From the point of view of the `camera_frame` the coordinate is indeed (1,0,0). However, if you wanted to compare `detected_panel` to `panel_0` you would need to transform it to the `map` coordinate frame. In this case that would be (2,2,0) + (1,0,0) = (3,2,0), the origin of the `camera_frame` + the pose of `detected_panel` gives you the position of `detected_panel` in the `map` coordinate frame.
+
+This was a trivial example so we could compute that in our heads. The computations become a bit more complex if `camera_frame` had a non trivial orientation like (0.707, 0.707, 0, 0). the tf2 library provides an abstraction that keeps track of these various coordinate frames and transforms, allowing us to worry about the logic, not the underlying math of transforms across coordinate frames.
+
+#### transforms
+
+a [geometry_msgs/transformStamped](https://docs.ros.org/en/humble/p/geometry_msgs/msg/TransformStamped.html) follows almost the same format as a geometry_msgs/pose
+
+looking at the message definition we have
+
+- `std_msgs/header header` This is a header that defines the parent frame (`map` or `camera_frame` for this assignment) and the timestamp of this pose
+- `string child_frame_id` The word "frame" here might be a little confusing because lets say you are defining `panel_0`, its just a pose, not meant to be seen as a coordinate frame. But, here's the secret: they are essentially the same thing (they are both defined by a 3d point and a quaternion orientation). So this field is just the name of the transform (`panel_0`, `detected_panel`, `camera_frame` etc.) that you can use to look up transforms by name using the tf2 api
+- `Transform transform` [geometry_msgs/transform](https://docs.ros.org/en/humble/p/geometry_msgs/msg/Transform.html). This is almost the same format as a geometry_msgs/pose. Read the docs and take note of why there is a semantic distinction between a `point` and a `vector3`
 
 4. Visualize your /tf tree using Foxglove studio
 ![foxglove 3d panel](.md/foxglove_3d_panel.png)

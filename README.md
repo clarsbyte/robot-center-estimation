@@ -29,8 +29,12 @@ In this training you will create visualizations and logging to determine the acc
 
 ![workspace with submodules initialized](.md/workspace_structure.png)
 
-4. run `colcon build`
-5. run each of the following commands __IN THEIR OWN terminal__ (you can have one terminal window and use multiple tabs, or create multiple terminals in vscode)
+4. install dependencies
+    - ros dependencies: `rosdep install -i --from-path src --rosdistro humble -y`
+    - install [maniskill](https://github.com/haosulab/ManiSkill?tab=readme-ov-file#installation). Look at the installation instructions in the README
+    - huskybot dependencies: `pip install -r src/tr-huskybot-cv/requirements.txt`
+5. run `colcon build`
+6. run each of the following commands __IN THEIR OWN terminal__ (you can have one terminal window and use multiple tabs, or create multiple terminals in vscode)
 
 ```bash
 # run each in its own terminal. Remember to source ros (source /opt/ros/humble/setup.bash and source the workspace (source install/setup.bash) in each terminal before every command below

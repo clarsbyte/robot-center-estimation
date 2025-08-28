@@ -36,8 +36,18 @@ In this training you will create visualizations and logging to determine the acc
 5. run `colcon build`
 6. run each of the following commands __IN THEIR OWN terminal__ (you can have one terminal window and use multiple tabs, or create multiple terminals in vscode)
 
+### __IMPORTANT__ if you do not have a discrete GPU on your device
+
+you can try launching the simulator in cpu render mode with a ros parameter
+
+`ros2 launch sim_node sim_node_launch.py "cv_exposure:=0.8" "cpu_sim:=true"`
+
+only do this if you do not have a discrete gpu
+
 ```bash
 # run each in its own terminal. Remember to source ros (source /opt/ros/humble/setup.bash and source the workspace (source install/setup.bash) in each terminal before every command below
+
+# this or the cpu render mode
 ros2 launch sim_node sim_node_launch.py "cv_exposure:=0.8"
 
 ros2 run huskybot_cv huskybot_cv --ros-args -p "use_sim_time:=true"

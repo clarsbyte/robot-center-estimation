@@ -36,13 +36,11 @@ In this training you will create visualizations and logging to determine the acc
 5. run `colcon build`
 6. run each of the following commands __IN THEIR OWN terminal__ (you can have one terminal window and use multiple tabs, or create multiple terminals in vscode)
 
-### __IMPORTANT__ if you do not have a discrete GPU on your device
+### !! IMPORTANT !! if you do not have a discrete GPU on your device
 
 you can try launching the simulator in cpu render mode with a ros parameter
 
 `ros2 launch sim_node sim_node_launch.py "cv_exposure:=0.8" "cpu_sim:=true"`
-
-only do this if you do not have a discrete gpu
 
 ```bash
 # run each in its own terminal. Remember to source ros (source /opt/ros/humble/setup.bash and source the workspace (source install/setup.bash) in each terminal before every command below
@@ -186,7 +184,7 @@ You may have felt how cumbersome it was to run each node in a separate terminal.
 
 1. read the documentation for [launch files](https://docs.ros.org/en/humble/Tutorials/Intermediate/Launch/Launch-Main.html)
 
-2. You should create a launch file inside your `your_solution` package that will launch the following nodes __and__ invoke the `sim_node_launch.py` launch file to start the sim. Create a new package called `my_launch` where this launch file will live
+2. You should create a launch file inside your `your_solution` package that will launch the following nodes __and__ invoke the `sim_node_launch.py` launch file to start the sim.
 
 nodes to launch:
 
@@ -198,7 +196,7 @@ nodes to launch:
 
 3. Test your launch file and use foxglove to confirm everything is still working correctly.
 
-4. yippie your done! Coordinate with the autonomy lead to have your code for this assignment reviewed
+4. yippie your __ALMOST__ done! <ins>Coordinate with the autonomy lead to have your code for this assignment reviewed</ins>
 
 ## Pitfalls, problems, and things to watch out for
 

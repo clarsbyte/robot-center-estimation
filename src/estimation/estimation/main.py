@@ -10,6 +10,7 @@ import math
 from transforms3d.euler import quat2euler
 from filterpy.kalman import KalmanFilter
 from filterpy.common import Q_discrete_white_noise
+import tf2_ros as tf2
 
 
 
@@ -34,7 +35,7 @@ class CenterEstimation(Node):
         self.center_results = []
 
         # Kalman Stuff
-        self.declare_parameter('process_noise', 0.01)
+        self.declare_parameter('process_noise', 0.001)
         self.declare_parameter('measurement_noise', 0.1)
         self.declare_parameter('initial_covariance', 10.0)
 
@@ -80,6 +81,7 @@ class CenterEstimation(Node):
 
         self.ellipse_points = np.array([])
 
+    
     def get_current_estimate(self):
         """Get the current Kalman filter estimate"""
         if not self.initialized:
@@ -152,22 +154,19 @@ class CenterEstimation(Node):
         normal_vector = np.array([forward_x, forward_y, forward_z])
         normal_vector = normal_vector / np.linalg.norm(normal_vector)  # Normalize
 
+        rotation_matrix = np.array([
+            [np.cos(yaw), -np.sin(yaw)],
+            [np.sin(yaw),  np.cos(yaw)]
+        ])
         # 2D covariance in panel's local frame (X-Z plane)
         covariance_local = np.array([
-            [0.8870892, 0.3],
-            [0.3, 0.2029108]
+            [0.8870892, 4],
+            [2, 0.2029108]
         ])
 
-        # Rotation matrix to transform from panel frame to map frame (2D rotation in XY plane)
-        cos_yaw = math.cos(yaw)
-        sin_yaw = math.sin(yaw)
-        rotation_2d = np.array([
-            [cos_yaw, -sin_yaw],
-            [sin_yaw, cos_yaw]
-        ])
 
-        # Transform covariance to fixed (map) frame: R * Cov * R^T
-        covariance_matrix_2d = covariance_local
+        #covariance_matrix_2d = rotation_matrix @ covariance_local @ rotation_matrix.T
+        covariance_matrix_2d = covariance_local  # No rotation for simplicity
 
         if np.isnan(covariance_matrix_2d).any():
             return
@@ -183,9 +182,9 @@ class CenterEstimation(Node):
             semi_major=1,
             semi_minor=0.3
         )
-
-        self.get_logger().info(f"Ellipse X values (first 5): {x_val[:5]}")
-        self.get_logger().info(f"Ellipse Y values (first 5): {y_val[:5]}")
+        self.get_logger().info(f"Normal vector: {normal_vector}")
+        #self.get_logger().info(f"Ellipse X values (first 5): {x_val[:5]}")
+        #self.get_logger().info(f"Ellipse Y values (first 5): {y_val[:5]}")
         #self.get_logger().info(f"Ellipse X values (last 5): {x_val[-5:]}")
         #self.get_logger().info(f"Ellipse Y values (last 5): {y_val[-5:]}")
 
@@ -196,14 +195,18 @@ class CenterEstimation(Node):
         # Extract 2D position (X, Y) from camera position
         raw_center = np.array([camera_pos[0], camera_pos[1]])
 
-# DEFINE COV MATRIX BASED ON ELLIPSE I KNOW
+
+        # DEFINE COV MATRIX BASED ON ELLIPSE I KNOW
         p.pose.pose.position.x = raw_center[0]
         p.pose.pose.position.y = raw_center[1]
         p.pose.pose.position.z = camera_pos[2]  # Keep original Z
-        p.pose.pose.orientation.x = panel_pose.orientation.x
-        p.pose.pose.orientation.y = panel_pose.orientation.y
-        p.pose.pose.orientation.z = panel_pose.orientation.z
-        p.pose.pose.orientation.w = panel_pose.orientation.w
+        p.pose.pose.orientation.x = math.sqrt(2)/2
+        p.pose.pose.orientation.y = 0.0
+        p.pose.pose.orientation.z = 0.0
+        p.pose.pose.orientation.w = math.sqrt(2)/2
+        #p.pose.pose.orientation.y = panel_pose.orientation.y
+        #p.pose.pose.orientation.z = panel_pose.orientation.z
+        #p.pose.pose.orientation.w = panel_pose.orientation.w
 
         # Create 3D covariance from 2D (X-Z plane), with small variance in Y
         covariance_6d = np.zeros((6, 6))
@@ -233,8 +236,10 @@ class CenterEstimation(Node):
 
             self.update_process_noise(dt)
 
-            self.kf.predict()
+            # KEY: Update measurement noise covariance with time-varying value
+            self.kf.R = covariance_matrix_2d.copy()
 
+            self.kf.predict()
             self.kf.update(raw_center)
 
             filtered_center_2d = self.kf.x[:2]

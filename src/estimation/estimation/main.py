@@ -26,6 +26,8 @@ class CenterEstimation(Node):
             10
         )   
 
+        self.pub_error = self.create_publisher(String, '/estimation/error', 10)
+
         self.pub_covariance = self.create_publisher(PoseWithCovarianceStamped, '/covariance', 10)
 
         self.pub_center = self.create_publisher(PoseStamped, '/estimated_center', 10)
@@ -65,13 +67,13 @@ class CenterEstimation(Node):
         # Initial covariance matrix (4x4 for state [x, y, vx, vy])
         self.kf.P = np.eye(4) * init_cov
         # Set position covariance from ellipse
-        self.kf.P[0, 0] = 0.8870892  # X variance
-        self.kf.P[1, 1] = 0.2029108  # Y variance
-        self.kf.P[0, 1] = 0.3        # X-Y correlation
-        self.kf.P[1, 0] = 0.3        # Y-X correlation
+        self.kf.P[0, 0] = 0.6  # X variance
+        self.kf.P[1, 1] = 0.25  # Y variance
+        self.kf.P[0, 1] = 0        # X-Y correlation
+        self.kf.P[1, 0] = 0        # Y-X correlation
 
         # Measurement noise covariance
-        self.kf.R = np.diag([0.1, 0.1])
+        self.kf.R = np.diag([0.6, 0.25])
 
         # Process noise covariance
         self.kf.Q = Q_discrete_white_noise(dim=2, dt=dt, var=0.1, block_size=2)
@@ -119,13 +121,13 @@ class CenterEstimation(Node):
         
         center_offset = direction * distance_to_target
         
-        self.get_logger().info(f"Center offset: {center_offset}, Major axis: {major_axis}, Minor axis: {minor_axis}")
+        #self.get_logger().info(f"Center offset: {center_offset}, Major axis: {major_axis}, Minor axis: {minor_axis}")
         return center_offset, major_axis, minor_axis, sorted_eigenvalues
 
     def get_ellipse_points(self,center,semi_major, semi_minor):
-        xc, zc = center[0], center[1]    # Center of the ellipse
-        a, b = semi_major, semi_minor      # Semi-major and semi-minor axes
-        interval = 0.1    # Interval in radians
+        xc, zc = center[0], center[1]    
+        a, b = semi_major, semi_minor      
+        interval = 0.1  
         t = np.arange(0, 2 * np.pi, interval)
         x_on = xc + a * np.cos(t)
         z_on = zc + b * np.sin(t)
@@ -139,7 +141,7 @@ class CenterEstimation(Node):
         p.header.frame_id = 'map'
         panel_pose = msg.secondary_robot.armor_panel_poses[1]
         center_pose = msg.secondary_robot.chassis_pose
-        # TODO: 1. Y AXIS UP TO Z AXIS UP. 2. IMPLEMENT TRANSLATION. RADIUS = 0.28. USE CHASSIS_POSE AS CENTER OF THE ROBOT.
+        
         quaternion = [
             panel_pose.orientation.w,
             panel_pose.orientation.x,
@@ -152,22 +154,28 @@ class CenterEstimation(Node):
         forward_y = math.sin(yaw) * math.cos(pitch)
         forward_z = math.sin(pitch)
         normal_vector = np.array([forward_x, forward_y, forward_z])
-        normal_vector = normal_vector / np.linalg.norm(normal_vector)  # Normalize
+        normal_vector = normal_vector / np.linalg.norm(normal_vector)
 
+        # The angle we need is the direction of the normal vector projected onto XY plane
+        angle = np.arctan2(normal_vector[1], normal_vector[0])
+        
+        # Rotation matrix for the XY plane based on normal vector direction
         rotation_matrix = np.array([
-            [np.cos(yaw), -np.sin(yaw)],
-            [np.sin(yaw),  np.cos(yaw)]
+            [np.cos(angle), -np.sin(angle)],
+            [np.sin(angle),  np.cos(angle)]
         ])
-        # 2D covariance in panel's local frame (X-Z plane)
+        
+
+        var_major = 0.6  # Major axis variance
+        var_minor = 0.25  # Minor axis variance
         covariance_local = np.array([
-            [0.8870892, 4],
-            [2, 0.2029108]
+            [var_major, 0],
+            [0, var_minor]
         ])
 
-
-        #covariance_matrix_2d = rotation_matrix @ covariance_local @ rotation_matrix.T
-        covariance_matrix_2d = covariance_local  # No rotation for simplicity
-
+        # Rotate the covariance to align with normal vector
+        covariance_matrix_2d = rotation_matrix @ covariance_local @ rotation_matrix.T
+        
         if np.isnan(covariance_matrix_2d).any():
             return
 
@@ -177,47 +185,48 @@ class CenterEstimation(Node):
             panel_pose.position.z
         ])
 
-        x_val, y_val = self.get_ellipse_points(
-            center=np.array([0.0, 0.0]),
-            semi_major=1,
-            semi_minor=0.3
-        )
-        self.get_logger().info(f"Normal vector: {normal_vector}")
-        #self.get_logger().info(f"Ellipse X values (first 5): {x_val[:5]}")
-        #self.get_logger().info(f"Ellipse Y values (first 5): {y_val[:5]}")
-        #self.get_logger().info(f"Ellipse X values (last 5): {x_val[-5:]}")
-        #self.get_logger().info(f"Ellipse Y values (last 5): {y_val[-5:]}")
-
-        xy = zip(x_val+camera_pos[0],y_val+camera_pos[1])
+        theta = np.linspace(0, 2 * np.pi, 100)
+        # Points on ellipse in local frame
+        x_local = np.sqrt(var_major) * np.cos(theta)
+        y_local = np.sqrt(var_minor) * np.sin(theta)
+        
+        points_local = np.vstack([x_local, y_local])
+        
+        points_rotated = rotation_matrix @ points_local
+        
+        # Translate to camera position
+        x_world = points_rotated[0, :] + camera_pos[0]
+        y_world = points_rotated[1, :] + camera_pos[1]
+        
+        #self.get_logger().info(f"Normal vector: {normal_vector}, Angle: {np.degrees(angle):.2f}°")
+        
+        xy = zip(x_world, y_world)
         result_list = [[x_val, y_val] for x_val, y_val in xy]
         self.ellipse_points = np.append(self.ellipse_points, result_list)
 
-        # Extract 2D position (X, Y) from camera position
+        # Displacement
         raw_center = np.array([camera_pos[0], camera_pos[1]])
+        raw_center -= 0.1 * normal_vector[:2]  
 
-
-        # DEFINE COV MATRIX BASED ON ELLIPSE I KNOW
+        # Fix the axis 
         p.pose.pose.position.x = raw_center[0]
         p.pose.pose.position.y = raw_center[1]
-        p.pose.pose.position.z = camera_pos[2]  # Keep original Z
+        p.pose.pose.position.z = camera_pos[2]
         p.pose.pose.orientation.x = math.sqrt(2)/2
         p.pose.pose.orientation.y = 0.0
         p.pose.pose.orientation.z = 0.0
         p.pose.pose.orientation.w = math.sqrt(2)/2
-        #p.pose.pose.orientation.y = panel_pose.orientation.y
-        #p.pose.pose.orientation.z = panel_pose.orientation.z
-        #p.pose.pose.orientation.w = panel_pose.orientation.w
 
-        # Create 3D covariance from 2D (X-Z plane), with small variance in Y
+        # Create 3D covariance from 2D
         covariance_6d = np.zeros((6, 6))
         covariance_6d[0, 0] = covariance_matrix_2d[0, 0]  # X variance
-        covariance_6d[0, 2] = covariance_matrix_2d[0, 1]  # X-Z correlation
-        covariance_6d[2, 0] = covariance_matrix_2d[1, 0]  # Z-X correlation
-        covariance_6d[2, 2] = covariance_matrix_2d[1, 1]  # Z variance
-        covariance_6d[1, 1] = 0.001  # Small Y variance (vertical)
-        covariance_6d[3, 3] = 0.01
-        covariance_6d[4, 4] = 0.01
-        covariance_6d[5, 5] = 0.01
+        covariance_6d[0, 1] = covariance_matrix_2d[0, 1]  # X-Y correlation
+        covariance_6d[1, 0] = covariance_matrix_2d[1, 0]  # Y-X correlation
+        covariance_6d[1, 1] = covariance_matrix_2d[1, 1]  # Y variance
+        covariance_6d[2, 2] = 0  
+        covariance_6d[3, 3] = 0
+        covariance_6d[4, 4] = 0
+        covariance_6d[5, 5] = 0
 
         p.pose.covariance = covariance_6d.flatten().tolist()
 
@@ -236,7 +245,6 @@ class CenterEstimation(Node):
 
             self.update_process_noise(dt)
 
-            # KEY: Update measurement noise covariance with time-varying value
             self.kf.R = covariance_matrix_2d.copy()
 
             self.kf.predict()
@@ -280,8 +288,8 @@ class CenterEstimation(Node):
         pos_covariance[1, 1] = self.kf.P[1, 1]  # Y variance
         pos_covariance[0, 1] = self.kf.P[0, 1]  # X-Y correlation
         pos_covariance[1, 0] = self.kf.P[1, 0]  # Y-X correlation
-        pos_covariance[2, 2] = 0.001  # Small Z variance
-        pos_covariance[3:, 3:] = np.eye(3) * 0.01  # Rotation variance
+        pos_covariance[2, 2] = 0.0  # Small Z variance
+        pos_covariance[3:, 3:] = np.eye(3) * 0.0  # Rotation variance
         p_filtered.pose.covariance = pos_covariance.flatten().tolist()
 
         original_pose = PoseWithCovarianceStamped()
@@ -292,13 +300,19 @@ class CenterEstimation(Node):
         original_pose.pose.pose.position.z = center_pose.position.z
         original_pose.pose.pose.orientation = center_pose.orientation
 
+        error_x = filtered_center_2d[0] - center_pose.position.x
+        error_y = filtered_center_2d[1] - center_pose.position.y
+        error = math.sqrt(error_x**2 + error_y**2)
+
+        self.get_logger().info(f"Estimation error: {error:.4f} meters")
+
 # get panel, get translation, ellipsoid, do translation
         self.pub_covariance.publish(p)
         self.pub_center.publish(center)
         self.pub_original.publish(original_pose)
 
-        if len(self.center_results) % 10 == 0:  # Log every 10 measurements
-            self.get_logger().info(f"Filtered: {filtered_center_2d}, Velocity: {self.kf.x[2:4]}")
+        #if len(self.center_results) % 10 == 0:  # Log every 10 measurements
+        #    self.get_logger().info(f"Filtered: {filtered_center_2d}, Velocity: {self.kf.x[2:4]}")
 # GET KALMAN FILTER TO ESTIMATE THE CENTER CAUSE THE ELLIPOSID SHOULD MASK THE CENTER
 
 def main():

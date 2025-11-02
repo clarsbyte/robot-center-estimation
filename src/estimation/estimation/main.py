@@ -67,13 +67,13 @@ class CenterEstimation(Node):
         # Initial covariance matrix (4x4 for state [x, y, vx, vy])
         self.kf.P = np.eye(4) * init_cov
         # Set position covariance from ellipse
-        self.kf.P[0, 0] = 0.6  # X variance
-        self.kf.P[1, 1] = 0.25  # Y variance
+        self.kf.P[0, 0] = 0.006  # X variance
+        self.kf.P[1, 1] = 0.002  # Y variance
         self.kf.P[0, 1] = 0        # X-Y correlation
         self.kf.P[1, 0] = 0        # Y-X correlation
 
         # Measurement noise covariance
-        self.kf.R = np.diag([0.6, 0.25])
+        self.kf.R = np.diag([0.006, 0.002])
 
         # Process noise covariance
         self.kf.Q = Q_discrete_white_noise(dim=2, dt=dt, var=0.1, block_size=2)
@@ -166,8 +166,8 @@ class CenterEstimation(Node):
         ])
         
 
-        var_major = 0.6  # Major axis variance
-        var_minor = 0.25  # Minor axis variance
+        var_major = 0.006  # Major axis variance
+        var_minor = 0.002  # Minor axis variance
         covariance_local = np.array([
             [var_major, 0],
             [0, var_minor]
@@ -206,7 +206,7 @@ class CenterEstimation(Node):
 
         # Displacement
         raw_center = np.array([camera_pos[0], camera_pos[1]])
-        raw_center -= 0.1 * normal_vector[:2]  
+        raw_center -= 0.2 * normal_vector[:2]  
 
         # Fix the axis 
         p.pose.pose.position.x = raw_center[0]

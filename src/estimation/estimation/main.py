@@ -45,43 +45,60 @@ class CenterEstimation(Node):
         meas_noise = self.get_parameter('measurement_noise').value
         init_cov = self.get_parameter('initial_covariance').value
 
-        # Kalman filter for center estimation (position and velocity)
-        self.kf = KalmanFilter(dim_x=4, dim_z=2)
+        # pos, v, acc
+        self.kf = KalmanFilter(dim_x=6, dim_z=2)
 
-        # State vector: [x, y, z, vx, vy, vz]
-        self.kf.x = np.zeros(4)
+        # State vector: [x, y, vx, vy, ax, ay]
+        self.kf.x = np.zeros(6)
 
-        # State transition matrix (constant velocity model)
-        dt = 0.1  # Default time step, will be updated dynamically
-        self.kf.F = np.array([[1., 0., dt, 0.],
-                 [0., 1., 0., dt],
-                 [0., 0., 1., 0.],
-                 [0., 0., 0., 1.]])
+        dt = 0.1 
+        self.kf.F = np.array([[1., 0., dt, 0., 0.5*dt**2, 0.],
+                              [0., 1., 0., dt, 0., 0.5*dt**2],
+                              [0., 0., 1., 0., dt, 0.],
+                              [0., 0., 0., 1., 0., dt],
+                              [0., 0., 0., 0., 1., 0.],
+                              [0., 0., 0., 0., 0., 1.]])
 
         # Measurement function (observe position only)
         self.kf.H = np.array([
-            [1, 0, 0, 0],
-            [0, 1, 0, 0],
+            [1, 0, 0, 0, 0, 0],
+            [0, 1, 0, 0, 0, 0],
         ])
 
-        # Initial covariance matrix (4x4 for state [x, y, vx, vy])
-        self.kf.P = np.eye(4) * init_cov
-        # Set position covariance from ellipse
-        self.kf.P[0, 0] = 0.006  # X variance
-        self.kf.P[1, 1] = 0.002  # Y variance
-        self.kf.P[0, 1] = 0        # X-Y correlation
-        self.kf.P[1, 0] = 0        # Y-X correlation
+        # P: Initial Covariance (High uncertainty to start)
+        self.kf.P *= 1000
 
-        # Measurement noise covariance
-        self.kf.R = np.diag([0.006, 0.002])
+        # R: Measurement noise covariance (placeholder, updated dynamically)
+        self.kf.R = np.diag([0.01, 0.004])
 
-        # Process noise covariance
-        self.kf.Q = Q_discrete_white_noise(dim=2, dt=dt, var=0.1, block_size=2)
+        # Q: Process noise covariance (will be updated dynamically)
+        self.kf.Q = self._compute_process_noise(dt)
 
         self.last_time = None
         self.initialized = False
 
         self.ellipse_points = np.array([])
+
+    def _compute_process_noise(self, dt):
+        """Compute process noise matrix for constant acceleration model"""
+        # q is the parameter for the spectral density of the white noise acceleration
+        q = self.get_parameter('process_noise').value 
+        
+        Q = np.zeros((6, 6))
+        
+        # Process noise for x-axis (position, velocity, acceleration)
+        Q_block = np.array([
+            [dt**4/4, dt**3/2, dt**2/2],
+            [dt**3/2, dt**2, dt],
+            [dt**2/2, dt, 1]
+        ]) * q
+        
+        Q[0:3, 0:3] = Q_block
+        
+        # Process noise for y-axis
+        Q[3:6, 3:6] = Q_block
+        
+        return Q
 
     
     def get_current_estimate(self):
@@ -92,25 +109,27 @@ class CenterEstimation(Node):
         return {
             'position': self.kf.x[:2].copy(),
             'velocity': self.kf.x[2:4].copy(),
+            'acceleration': self.kf.x[4:6].copy(),
             'position_covariance': self.kf.P[:2, :2].copy(),
-            'velocity_covariance': self.kf.P[2:4, 2:4].copy()
+            'velocity_covariance': self.kf.P[2:4, 2:4].copy(),
+            'acceleration_covariance': self.kf.P[4:6, 4:6].copy()
         }
+
+    def update_state_transition(self, dt):
+        """Update state transition matrix based on time step"""
+        self.kf.F = np.array([[1., 0., dt, 0., 0.5*dt**2, 0.],
+                              [0., 1., 0., dt, 0., 0.5*dt**2],
+                              [0., 0., 1., 0., dt, 0.],
+                              [0., 0., 0., 1., 0., dt],
+                              [0., 0., 0., 0., 1., 0.],
+                              [0., 0., 0., 0., 0., 1.]])
 
     def update_process_noise(self, dt):
         """Update process noise based on time step"""
-
-        q_pos = self.get_parameter('process_noise').value
-
-        # 2D process noise matrix
-        self.kf.Q = np.array([
-            [q_pos*dt**4/4, 0, q_pos*dt**3/2, 0],
-            [0, q_pos*dt**4/4, 0, q_pos*dt**3/2],
-            [q_pos*dt**3/2, 0, q_pos*dt**2, 0],
-            [0, q_pos*dt**3/2, 0, q_pos*dt**2]
-        ])
+        self.kf.Q = self._compute_process_noise(dt)
 
     def ellipsoid_parameters(self, covariance_matrix, camera_pos, direction, distance_to_target=1.0):
-        # Kalman filter input is the center of the ellipsoid
+        # NOTE: This function seems unused in the callback but is kept for utility.
         eigenvalues, eigenvectors = np.linalg.eig(covariance_matrix)
         sorted_indices = np.argsort(eigenvalues)[::-1]
         sorted_eigenvalues = eigenvalues[sorted_indices]
@@ -125,6 +144,7 @@ class CenterEstimation(Node):
         return center_offset, major_axis, minor_axis, sorted_eigenvalues
 
     def get_ellipse_points(self,center,semi_major, semi_minor):
+        # NOTE: This function seems unused in the callback but is kept for utility.
         xc, zc = center[0], center[1]    
         a, b = semi_major, semi_minor      
         interval = 0.1  
@@ -136,9 +156,8 @@ class CenterEstimation(Node):
 
     def camera_callback(self, msg):
         self.get_logger().info("Received ground truth message")
-        p = PoseWithCovarianceStamped()
-        p.header.stamp = self.get_clock().now().to_msg()
-        p.header.frame_id = 'map'
+        
+        
         panel_pose = msg.secondary_robot.armor_panel_poses[1]
         center_pose = msg.secondary_robot.chassis_pose
         
@@ -150,13 +169,13 @@ class CenterEstimation(Node):
         ]
         roll, pitch, yaw = quat2euler(quaternion)
 
+        # Calculate the normal vector of the panel in the world frame
         forward_x = math.cos(yaw) * math.cos(pitch)
         forward_y = math.sin(yaw) * math.cos(pitch)
         forward_z = math.sin(pitch)
         normal_vector = np.array([forward_x, forward_y, forward_z])
         normal_vector = normal_vector / np.linalg.norm(normal_vector)
 
-        # The angle we need is the direction of the normal vector projected onto XY plane
         angle = np.arctan2(normal_vector[1], normal_vector[0])
         
         # Rotation matrix for the XY plane based on normal vector direction
@@ -165,15 +184,15 @@ class CenterEstimation(Node):
             [np.sin(angle),  np.cos(angle)]
         ])
         
-
-        var_major = 0.006  # Major axis variance
-        var_minor = 0.002  # Minor axis variance
+        # Define the variance along (major) and perpendicular (minor) to the normal vector
+        var_major = 0.006  # Major axis variance (along the normal, more uncertainty)
+        var_minor = 0.002  # Minor axis variance (perpendicular to the normal, less uncertainty)
         covariance_local = np.array([
             [var_major, 0],
             [0, var_minor]
         ])
 
-        # Rotate the covariance to align with normal vector
+        # Rotate the covariance to align with normal vector -> This is the dynamic R matrix
         covariance_matrix_2d = rotation_matrix @ covariance_local @ rotation_matrix.T
         
         if np.isnan(covariance_matrix_2d).any():
@@ -184,98 +203,78 @@ class CenterEstimation(Node):
             panel_pose.position.y,
             panel_pose.position.z
         ])
-
-        theta = np.linspace(0, 2 * np.pi, 100)
-        # Points on ellipse in local frame
-        x_local = np.sqrt(var_major) * np.cos(theta)
-        y_local = np.sqrt(var_minor) * np.sin(theta)
         
-        points_local = np.vstack([x_local, y_local])
-        
-        points_rotated = rotation_matrix @ points_local
-        
-        # Translate to camera position
-        x_world = points_rotated[0, :] + camera_pos[0]
-        y_world = points_rotated[1, :] + camera_pos[1]
-        
-        #self.get_logger().info(f"Normal vector: {normal_vector}, Angle: {np.degrees(angle):.2f}°")
-        
-        xy = zip(x_world, y_world)
-        result_list = [[x_val, y_val] for x_val, y_val in xy]
-        self.ellipse_points = np.append(self.ellipse_points, result_list)
-
-        # Displacement
+        # displacement
         raw_center = np.array([camera_pos[0], camera_pos[1]])
-        raw_center -= 0.2 * normal_vector[:2]  
+        raw_center -= 0.20 * normal_vector[:2]  
 
-        # Fix the axis 
+        
+        p = PoseWithCovarianceStamped()
+        p.header.stamp = self.get_clock().now().to_msg()
+        p.header.frame_id = 'map'
         p.pose.pose.position.x = raw_center[0]
         p.pose.pose.position.y = raw_center[1]
-        p.pose.pose.position.z = camera_pos[2]
-        p.pose.pose.orientation.x = math.sqrt(2)/2
-        p.pose.pose.orientation.y = 0.0
-        p.pose.pose.orientation.z = 0.0
-        p.pose.pose.orientation.w = math.sqrt(2)/2
+        p.pose.pose.position.z = camera_pos[2] # Keep Z from measurement
+        p.pose.pose.orientation = panel_pose.orientation 
 
-        # Create 3D covariance from 2D
-        covariance_6d = np.zeros((6, 6))
-        covariance_6d[0, 0] = covariance_matrix_2d[0, 0]  # X variance
-        covariance_6d[0, 1] = covariance_matrix_2d[0, 1]  # X-Y correlation
-        covariance_6d[1, 0] = covariance_matrix_2d[1, 0]  # Y-X correlation
-        covariance_6d[1, 1] = covariance_matrix_2d[1, 1]  # Y variance
-        covariance_6d[2, 2] = 0  
-        covariance_6d[3, 3] = 0
-        covariance_6d[4, 4] = 0
-        covariance_6d[5, 5] = 0
+        # Create 6x6 covariance from the dynamic 2x2 measurement covariance (R)
+        covariance_6d_raw = np.zeros((6, 6))
+        covariance_6d_raw[0:2, 0:2] = covariance_matrix_2d
+        
+        p.pose.covariance = covariance_6d_raw.flatten().tolist()
+        self.pub_covariance.publish(p)
 
-        p.pose.covariance = covariance_6d.flatten().tolist()
-
-        center = PoseStamped()
-        center.header.frame_id = "map"
-        center.header.stamp = self.get_clock().now().to_msg()
 
         current_time = self.get_clock().now()
+        filtered_center_2d = raw_center # Default for first run
 
         if self.last_time is not None:
             dt = (current_time - self.last_time).nanoseconds / 1e9
             dt = max(dt, 0.001)
 
-            self.kf.F[0, 2] = dt
-            self.kf.F[1, 3] = dt
-
+            # Update matrices based on time step
+            self.update_state_transition(dt)
             self.update_process_noise(dt)
 
+            # Update measurement noise R with the dynamically calculated covariance
             self.kf.R = covariance_matrix_2d.copy()
 
             self.kf.predict()
-            self.kf.update(raw_center)
+            self.kf.update(z=[raw_center[0], raw_center[1]], R=covariance_matrix_2d)
 
             filtered_center_2d = self.kf.x[:2]
 
         else:
-            self.kf.x[:2] = raw_center
-            self.kf.x[2:] = 0
+            # Initialize state vector
+            self.kf.x[:2] = raw_center  # position
+            self.kf.x[2:4] = 0  # velocity
+            self.kf.x[4:6] = 0  # acceleration
             filtered_center_2d = raw_center
             self.initialized = True
 
         self.last_time = current_time
 
+        # Store results (good practice)
         self.center_results.append({
             'timestamp': current_time,
             'raw_center': raw_center.copy(),
             'filtered_center': filtered_center_2d.copy(),
             'velocity': self.kf.x[2:4].copy() if self.initialized else np.zeros(2),
+            'acceleration': self.kf.x[4:6].copy() if self.initialized else np.zeros(2),
             'covariance': self.kf.P.copy()
         })
 
+
+        center = PoseStamped()
+        center.header.frame_id = "map"
+        center.header.stamp = self.get_clock().now().to_msg()
+        
         center.pose.position.x = float(filtered_center_2d[0])
         center.pose.position.y = float(filtered_center_2d[1])
         center.pose.position.z = float(camera_pos[2])  # Keep original Z
 
-        center.pose.orientation.x = panel_pose.orientation.x
-        center.pose.orientation.y = panel_pose.orientation.y
-        center.pose.orientation.z = panel_pose.orientation.z
-        center.pose.orientation.w = panel_pose.orientation.w
+        center.pose.orientation = panel_pose.orientation
+        self.pub_center.publish(center)
 
         p_filtered = PoseWithCovarianceStamped()
         p_filtered.header.stamp = self.get_clock().now().to_msg()
@@ -283,14 +282,13 @@ class CenterEstimation(Node):
         p_filtered.pose.pose = center.pose
 
         pos_covariance = np.zeros((6, 6))
-        # Map 2D covariance to 3D (X, Y positions)
-        pos_covariance[0, 0] = self.kf.P[0, 0]  # X variance
-        pos_covariance[1, 1] = self.kf.P[1, 1]  # Y variance
-        pos_covariance[0, 1] = self.kf.P[0, 1]  # X-Y correlation
-        pos_covariance[1, 0] = self.kf.P[1, 0]  # Y-X correlation
-        pos_covariance[2, 2] = 0.0  # Small Z variance
-        pos_covariance[3:, 3:] = np.eye(3) * 0.0  # Rotation variance
+        pos_covariance[0:2, 0:2] = self.kf.P[0:2, 0:2]
+        pos_covariance[2, 2] = 1e-6 # Small Z variance
+        pos_covariance[3:, 3:] = np.eye(3) * 1e-6 # Small rotation variance
         p_filtered.pose.covariance = pos_covariance.flatten().tolist()
+        
+        self.pub_covariance.publish(p_filtered) # Publishing the filtered P matrix (overwrites raw R above)
+
 
         original_pose = PoseWithCovarianceStamped()
         original_pose.header.frame_id = "map"
@@ -299,21 +297,17 @@ class CenterEstimation(Node):
         original_pose.pose.pose.position.y = center_pose.position.y
         original_pose.pose.pose.position.z = center_pose.position.z
         original_pose.pose.pose.orientation = center_pose.orientation
+        self.pub_original.publish(original_pose)
 
         error_x = filtered_center_2d[0] - center_pose.position.x
         error_y = filtered_center_2d[1] - center_pose.position.y
         error = math.sqrt(error_x**2 + error_y**2)
 
         self.get_logger().info(f"Estimation error: {error:.4f} meters")
-
-# get panel, get translation, ellipsoid, do translation
-        self.pub_covariance.publish(p)
-        self.pub_center.publish(center)
-        self.pub_original.publish(original_pose)
-
-        #if len(self.center_results) % 10 == 0:  # Log every 10 measurements
-        #    self.get_logger().info(f"Filtered: {filtered_center_2d}, Velocity: {self.kf.x[2:4]}")
-# GET KALMAN FILTER TO ESTIMATE THE CENTER CAUSE THE ELLIPOSID SHOULD MASK THE CENTER
+        if self.initialized:
+            self.get_logger().info(f"Velocity: [{self.kf.x[2]:.4f}, {self.kf.x[3]:.4f}] m/s, "
+                                 f"Acceleration: [{self.kf.x[4]:.4f}, {self.kf.x[5]:.4f}] m/s²")
+        
 
 def main():
     rclpy.init()

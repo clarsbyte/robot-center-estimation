@@ -220,6 +220,8 @@ class CenterEstimation(Node):
         # Create 6x6 covariance from the dynamic 2x2 measurement covariance (R)
         covariance_6d_raw = np.zeros((6, 6))
         covariance_6d_raw[0:2, 0:2] = covariance_matrix_2d
+
+        #DISPLACEMENT ALGORITHM
         
         p.pose.covariance = covariance_6d_raw.flatten().tolist()
         self.pub_covariance.publish(p)
